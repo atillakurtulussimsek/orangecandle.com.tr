@@ -1,0 +1,454 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextIndex"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  phone     String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses Address[]
+  orders    Order[]
+  reviews   Review[]
+  cart      CartItem[]
+  wishlist  WishlistItem[]
+  personalOffers PersonalOffer[]
+
+  @@map("users")
+}
+
+model Address {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  fullName  String
+  phone     String
+  address   String
+  city      String
+  district  String
+  zipCode   String
+  isDefault Boolean @default(false)
+  
+  // Billing Address Fields
+  isBillingAddress Boolean? @default(false)
+  companyName      String?
+  taxNumber        String?
+  taxOffice        String?
+
+  @@map("addresses")
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  slug        String     @unique
+  description String?    @db.Text
+  image       String?
+  parentId    String?
+  parent      Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryToCategory")
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([slug])
+  @@map("categories")
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  description  String   @db.Text
+  price        Decimal  @db.Decimal(10, 2)
+  comparePrice Decimal? @db.Decimal(10, 2)
+  stock        Int      @default(0)
+  sku          String   @unique
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  images       String   @db.Text // JSON array of image URLs
+  tags         String?  @db.Text // JSON array of tags
+  featured     Boolean  @default(false)
+  bestseller   Boolean  @default(false)
+  newArrival   Boolean  @default(false)
+  onSale       Boolean  @default(false)
+  discount     Int?     @default(0)
+  weight       String?
+  dimensions   String?
+  burnTime     String?
+  scent        String?
+  material     String?
+  
+  // Stok Yönetimi
+  stockTracking    Boolean @default(true)  // Stok takibi yapılsın mı?
+  allowBackorder   Boolean @default(false) // Stok bitince sipariş alınabilir mi?
+  backorderMessage String? @db.Text        // Ön sipariş mesajı
+  lowStockThreshold Int    @default(10)    // Düşük stok uyarı seviyesi
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orderItems OrderItem[]
+  reviews    Review[]
+  cartItems  CartItem[]
+  wishlistItems WishlistItem[]
+  personalOffers PersonalOffer[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@fulltext([name, description])
+  @@map("products")
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  orderNumber   String        @unique
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  items         OrderItem[]
+  subtotal      Decimal       @db.Decimal(10, 2)
+  shipping      Decimal       @db.Decimal(10, 2) @default(0)
+  tax           Decimal       @db.Decimal(10, 2) @default(0)
+  total         Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(PENDING)
+  orderStatus   OrderStatus   @default(PENDING)
+  notes         String?       @db.Text
+  trackingNumber String?
+  
+  // Shipping Address
+  shippingFullName String
+  shippingPhone    String
+  shippingAddress  String @db.Text
+  shippingCity     String
+  shippingDistrict String
+  shippingZipCode  String
+  
+  // Billing Address (optional, same as shipping if null)
+  billingFullName  String?
+  billingPhone     String?
+  billingAddress   String? @db.Text
+  billingCity      String?
+  billingDistrict  String?
+  billingZipCode   String?
+  
+  // ParamPOS Payment Details
+  paramposTransactionId String?
+  paramposOrderId       String?
+  paramposPaymentData   String? @db.Text // JSON
+  
+  // Geliver Cargo Details
+  geliverShipmentId     String? // Geliver gönderi ID'si
+  geliverTransactionId  String? // Geliver işlem ID'si
+  geliverOfferId        String? // Kabul edilen teklif ID'si
+  cargoProvider         String? // Kargo firması adı (ör: MNG, Yurtiçi)
+  cargoTrackingUrl      String? // Kargo takip URL'si
+  cargoTrackingNumber   String? // Kargo takip numarası
+  cargoBarcode          String? // Kargo barkod numarası
+  cargoLabelUrl         String? // PDF etiket URL'si
+  cargoResponsiveLabelUrl String? // HTML etiket URL'si
+  cargoCreatedAt        DateTime? // Kargo gönderisi oluşturma tarihi
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  price     Decimal @db.Decimal(10, 2)
+  quantity  Int
+  image     String
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("cart_items")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int      // 1-5
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@map("reviews")
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("wishlist_items")
+}
+
+model WishlistHistory {
+  id          String              @id @default(cuid())
+  userId      String
+  productId   String
+  productName String              // Ürün adı (ürün silinse bile görünsün)
+  productSlug String?
+  productImage String?
+  action      WishlistAction      // ADDED veya REMOVED
+  reason      WishlistRemoveReason? // Sadece REMOVED için
+  removedBy   String?             // Kimin sildiği (userId, "system", "admin")
+  notes       String?             @db.Text // Ek açıklama
+  createdAt   DateTime            @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("wishlist_history")
+}
+
+model ActivityLog {
+  id          String       @id @default(cuid())
+  userId      String
+  action      ActivityAction
+  category    ActivityCategory
+  description String       @db.Text
+  metadata    String?      @db.Text // JSON format: productId, orderId, addressId, etc.
+  ipAddress   String?
+  port        String?
+  userAgent   String?      @db.Text
+  device      String?      // mobile, tablet, desktop
+  browser     String?
+  os          String?
+  referer     String?      @db.Text
+  statusCode  Int?
+  errorMessage String?     @db.Text
+  duration    Int?         // İşlem süresi (ms)
+  createdAt   DateTime     @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([category])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+enum WishlistAction {
+  ADDED
+  REMOVED
+}
+
+enum WishlistRemoveReason {
+  USER_REMOVED          // Kullanıcı kendisi çıkardı
+  PURCHASED             // Ürün satın alındı
+  CAMPAIGN_CANCELLED    // Kampanya iptal edildi
+  PRODUCT_UNAVAILABLE   // Ürün yayından kaldırıldı
+  ADMIN_REMOVED         // Admin sildi
+  SYSTEM_CLEANUP        // Sistem temizliği
+}
+
+enum ActivityAction {
+  // Kimlik doğrulama
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET_COMPLETE
+  PASSWORD_CHANGE
+  
+  // Ürün işlemleri
+  PRODUCT_VIEW
+  PRODUCT_SEARCH
+  CATEGORY_VIEW
+  
+  // Sepet işlemleri
+  CART_VIEW
+  CART_ADD
+  CART_REMOVE
+  CART_UPDATE
+  CART_CLEAR
+  
+  // İstek listesi
+  WISHLIST_VIEW
+  WISHLIST_ADD
+  WISHLIST_REMOVE
+  
+  // Sipariş işlemleri
+  ORDER_CREATE
+  ORDER_VIEW
+  ORDER_CANCEL
+  CHECKOUT_START
+  CHECKOUT_COMPLETE
+  PAYMENT_INITIATED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  
+  // Adres işlemleri
+  ADDRESS_VIEW
+  ADDRESS_ADD
+  ADDRESS_UPDATE
+  ADDRESS_DELETE
+  ADDRESS_SET_DEFAULT
+  
+  // Profil işlemleri
+  PROFILE_VIEW
+  PROFILE_UPDATE
+  EMAIL_CHANGE
+  PHONE_CHANGE
+  
+  // Yorum işlemleri
+  REVIEW_ADD
+  REVIEW_UPDATE
+  REVIEW_DELETE
+  
+  // Admin işlemleri
+  ADMIN_LOGIN
+  ADMIN_LOGOUT
+  ADMIN_PRODUCT_CREATE
+  ADMIN_PRODUCT_UPDATE
+  ADMIN_PRODUCT_DELETE
+  ADMIN_PRODUCT_BULK_DELETE
+  ADMIN_CATEGORY_CREATE
+  ADMIN_CATEGORY_UPDATE
+  ADMIN_CATEGORY_DELETE
+  ADMIN_ORDER_VIEW
+  ADMIN_ORDER_UPDATE_STATUS
+  ADMIN_ORDER_CANCEL
+  ADMIN_CUSTOMER_VIEW
+  ADMIN_CUSTOMER_UPDATE
+  ADMIN_CUSTOMER_DELETE
+  ADMIN_CUSTOMER_ROLE_CHANGE
+  ADMIN_OFFER_CREATE
+  ADMIN_OFFER_UPDATE
+  ADMIN_OFFER_DELETE
+  ADMIN_REVIEW_APPROVE
+  ADMIN_REVIEW_REJECT
+  ADMIN_REVIEW_DELETE
+  ADMIN_SETTINGS_UPDATE
+  ADMIN_STATS_VIEW
+  ADMIN_LOGS_VIEW
+  
+  // Diğer
+  PAGE_VIEW
+  FILE_DOWNLOAD
+  FILE_UPLOAD
+  CONTACT_FORM_SUBMIT
+  NEWSLETTER_SUBSCRIBE
+  ERROR_OCCURRED
+}
+
+enum ActivityCategory {
+  AUTH
+  PRODUCT
+  CART
+  WISHLIST
+  ORDER
+  PAYMENT
+  ADDRESS
+  PROFILE
+  REVIEW
+  ADMIN
+  SYSTEM
+  ERROR
+}
+
+model PersonalOffer {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  offerType   OfferType
+  discountPercent Int?    // Yüzde indirim için
+  discountAmount  Decimal? @db.Decimal(10, 2) // Sabit tutar indirim için
+  buyQuantity     Int?    // "X Al" için
+  getQuantity     Int?    // "Y Bedava" için
+  description String   @db.Text // Kampanya açıklaması
+  validFrom   DateTime
+  validUntil  DateTime
+  isActive    Boolean  @default(true)
+  usedCount   Int      @default(0) // Kaç kez kullanıldı
+  maxUsage    Int?     // Maksimum kullanım sayısı (null = sınırsız)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([validFrom, validUntil])
+  @@map("personal_offers")
+}
+
+enum OfferType {
+  PERCENTAGE_DISCOUNT  // Yüzde indirim
+  FIXED_DISCOUNT       // Sabit tutar indirim
+  BUY_X_GET_Y         // X Al Y Bedava
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  CASH_ON_DELIVERY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
