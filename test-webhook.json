@@ -1,0 +1,12 @@
+{
+  "event": "TRACK_UPDATED",
+  "data": {
+    "shipmentId": "test-shipment-123",
+    "trackingNumber": "TEST-TRACK-456",
+    "trackingUrl": "https://track.example.com/TEST-TRACK-456",
+    "trackingStatus": {
+      "trackingStatusCode": "IN_TRANSIT",
+      "description": "Kargo yolda"
+    }
+  }
+}

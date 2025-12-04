@@ -2,7 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyGeliverWebhook } from '@/lib/geliver';
 import { logActivity } from '@/lib/activityLogger';
-import { logWebhook } from '@/lib/webhookLogger';
+import fs from 'fs';
+import path from 'path';
+
+// Webhook'ları dosyaya kaydet
+async function saveWebhookToFile(data: any) {
+  try {
+    const logsDir = path.join(process.cwd(), 'webhook-logs');
+    
+    // Klasör yoksa oluştur
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const eventName = data.event || 'unknown';
+    const filename = `geliver-${eventName}-${timestamp}.json`;
+    const filepath = path.join(logsDir, filename);
+    
+    fs.writeFileSync(filepath, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`✅ Webhook saved: webhook-logs/${filename}`);
+  } catch (error) {
+    console.error('❌ Failed to save webhook to file:', error);
+  }
+}
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
@@ -22,21 +45,19 @@ export async function POST(req: NextRequest) {
     } catch (parseError: any) {
       const errorMessage = `Invalid JSON: ${parseError.message}`;
       
-      // Log başarısız webhook
-      await logWebhook({
-        source: 'geliver',
+      // Hatalı webhook'u dosyaya kaydet
+      await saveWebhookToFile({
+        timestamp: new Date().toISOString(),
         event: 'PARSE_ERROR',
-        method: req.method,
-        url: req.url,
+        success: false,
+        error: errorMessage,
         headers,
-        requestBody,
-        responseStatus: 400,
-        responseBody: { error: errorMessage },
-        isSuccess: false,
-        errorMessage,
-        processingTime: Date.now() - startTime,
+        rawBody: requestBody,
+        parsedBody: null,
         ipAddress,
         userAgent,
+        processingTime: Date.now() - startTime,
+        response: { error: errorMessage, status: 400 }
       });
 
       return NextResponse.json({ error: errorMessage }, { status: 400 });
@@ -53,23 +74,21 @@ export async function POST(req: NextRequest) {
       const errorMessage = 'Invalid webhook signature';
       console.error(errorMessage);
       
-      // Log başarısız webhook
-      await logWebhook({
-        source: 'geliver',
+      // Signature hatası webhook'unu dosyaya kaydet
+      await saveWebhookToFile({
+        timestamp: new Date().toISOString(),
         event: parsedEvent.event || 'UNKNOWN',
-        method: req.method,
-        url: req.url,
+        success: false,
+        error: errorMessage,
         headers,
-        requestBody,
-        responseStatus: 400,
-        responseBody: { error: errorMessage },
-        isSuccess: false,
-        errorMessage,
-        processingTime: Date.now() - startTime,
+        rawBody: requestBody,
+        parsedBody: parsedEvent,
         ipAddress,
         userAgent,
         signature: signature as string,
         isSignatureValid: false,
+        processingTime: Date.now() - startTime,
+        response: { error: errorMessage, status: 400 }
       });
 
       return NextResponse.json({ error: errorMessage }, { status: 400 });
@@ -113,25 +132,23 @@ export async function POST(req: NextRequest) {
       ...result 
     };
 
-    // Log webhook
-    await logWebhook({
-      source: 'geliver',
+    // Webhook'u dosyaya kaydet
+    await saveWebhookToFile({
+      timestamp: new Date().toISOString(),
       event: parsedEvent.event,
-      method: req.method,
-      url: req.url,
+      success: isSuccess,
+      error: errorMessage || null,
       headers,
-      requestBody,
-      responseStatus,
-      responseBody,
-      orderId,
-      shipmentId,
-      isSuccess,
-      errorMessage,
-      processingTime,
+      rawBody: requestBody,
+      parsedBody: parsedEvent,
       ipAddress,
       userAgent,
       signature: signature as string,
       isSignatureValid,
+      orderId,
+      shipmentId,
+      processingTime,
+      response: { body: responseBody, status: responseStatus }
     });
 
     return NextResponse.json(responseBody, { status: responseStatus });
@@ -140,25 +157,23 @@ export async function POST(req: NextRequest) {
     const errorMessage = error.message || 'Unknown error';
     const processingTime = Date.now() - startTime;
 
-    // Log kritik hata
+    // Kritik hata webhook'unu dosyaya kaydet
     try {
-      await logWebhook({
-        source: 'geliver',
+      await saveWebhookToFile({
+        timestamp: new Date().toISOString(),
         event: parsedEvent?.event || 'UNKNOWN',
-        method: req.method,
-        url: req.url,
+        success: false,
+        error: errorMessage,
         headers: Object.fromEntries(req.headers.entries()),
-        requestBody,
-        responseStatus: 500,
-        responseBody: { error: 'Webhook processing failed', details: errorMessage },
-        isSuccess: false,
-        errorMessage,
-        processingTime,
+        rawBody: requestBody,
+        parsedBody: parsedEvent,
         ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
         userAgent: req.headers.get('user-agent') || 'unknown',
+        processingTime,
+        response: { error: 'Webhook processing failed', details: errorMessage, status: 500 }
       });
     } catch (logError) {
-      console.error('Failed to log webhook error:', logError);
+      console.error('Failed to save webhook error to file:', logError);
     }
 
     return NextResponse.json(
