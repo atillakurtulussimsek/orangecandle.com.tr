@@ -452,3 +452,39 @@ enum OrderStatus {
   DELIVERED
   CANCELLED
 }
+
+model WebhookLog {
+  id               String   @id @default(cuid())
+  source           String   // 'geliver', 'parampos', etc.
+  event            String   // Event type: 'TRACK_UPDATED', 'SHIPMENT_CREATED', etc.
+  method           String   // HTTP method: GET, POST, etc.
+  url              String   @db.Text
+  headers          String?  @db.Text // JSON format
+  requestBody      String?  @db.LongText // Full request body
+  responseStatus   Int?     // HTTP status code sent back
+  responseBody     String?  @db.LongText // Full response body
+  orderId          String?  // Related order ID
+  shipmentId       String?  // Related shipment ID
+  transactionId    String?  // Related transaction ID
+  isProcessed      Boolean  @default(false)
+  isSuccess        Boolean  @default(false)
+  errorMessage     String?  @db.Text
+  processingTime   Int?     // Processing time in ms
+  ipAddress        String?
+  userAgent        String?  @db.Text
+  signature        String?  @db.Text // Webhook signature for verification
+  isSignatureValid Boolean? // Whether signature was valid
+  retryCount       Int      @default(0)
+  lastRetryAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([source])
+  @@index([event])
+  @@index([orderId])
+  @@index([shipmentId])
+  @@index([isProcessed])
+  @@index([isSuccess])
+  @@index([createdAt])
+  @@map("webhook_logs")
+}
