@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useCart } from '@/contexts/CartContext';
+import { useSettings } from '@/contexts/SettingsContext';
 
 interface CartSidebarProps {
   onClose: () => void;
@@ -10,6 +11,7 @@ interface CartSidebarProps {
 
 export default function CartSidebar({ onClose }: CartSidebarProps) {
   const { items, removeFromCart, updateQuantity, getSubtotal, getDiscount, getTotal } = useCart();
+  const settings = useSettings();
 
   if (items.length === 0) {
     return (
@@ -59,7 +61,7 @@ export default function CartSidebar({ onClose }: CartSidebarProps) {
   const subtotal = getSubtotal();
   const discount = getDiscount();
   const total = getTotal();
-  const shipping = total >= 500 ? 0 : 29.99;
+  const shipping = total >= settings.shipping.freeShippingThreshold ? 0 : settings.shipping.defaultShippingCost;
   const finalTotal = total + shipping;
 
   return (
@@ -188,10 +190,10 @@ export default function CartSidebar({ onClose }: CartSidebarProps) {
             )}
           </div>
           
-          {total < 500 && (
-            <div className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
-              ₺{(500 - total).toFixed(2)} daha alışveriş yapın, kargo bedava!
-            </div>
+          {total < settings.shipping.freeShippingThreshold && (
+            <p className="text-xs text-gray-600 bg-orange-50 p-2 rounded">
+              ₺{(settings.shipping.freeShippingThreshold - total).toFixed(2)} daha alışveriş yapın, kargo bedava!
+            </p>
           )}
           
           <div className="border-t pt-3 flex justify-between items-center">

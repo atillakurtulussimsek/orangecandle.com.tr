@@ -58,6 +58,14 @@ interface OrderDetail {
   notes: string | null;
   paramposTransactionId: string | null;
   paramposOrderId: string | null;
+  // Payment Receipt Fields
+  paymentReceiptBase64: string | null;
+  paymentReceiptFileName: string | null;
+  paymentReceiptMimeType: string | null;
+  paymentReceiptUploadedAt: string | null;
+  paymentApprovedAt: string | null;
+  paymentRejectedAt: string | null;
+  paymentRejectionReason: string | null;
   items: OrderItem[];
   // Geliver Cargo Fields
   geliverShipmentId: string | null;
@@ -100,9 +108,30 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
   const [showOffersModal, setShowOffersModal] = useState(false);
   const [offersLoading, setOffersLoading] = useState(false);
 
+  // Tracking states
+  const [trackingInfo, setTrackingInfo] = useState<any>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
+
+  // Payment receipt states
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<'APPROVE' | 'REJECT' | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [approvalLoading, setApprovalLoading] = useState(false);
+
   useEffect(() => {
     loadOrderDetail();
   }, [params.id]);
+
+  // Sipariş yüklendikten sonra kargo durumunu otomatik çek
+  useEffect(() => {
+    if (order && order.geliverShipmentId && !trackingInfo) {
+      fetchTrackingInfo();
+    }
+  }, [order]);
 
   const loadOrderDetail = async () => {
     setLoading(true);
@@ -225,6 +254,60 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
     });
   };
 
+  // Tracking functions
+  const fetchTrackingInfo = async () => {
+    if (!order?.geliverShipmentId) return;
+
+    setTrackingLoading(true);
+    setTrackingError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `/api/admin/shipping/track?shipmentId=${order.geliverShipmentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Takip bilgisi alınamadı');
+      }
+
+      const data = await response.json();
+      setTrackingInfo(data);
+
+      // Reload order to get updated status
+      await loadOrderDetail();
+    } catch (err: any) {
+      setTrackingError(err.message || 'Bir hata oluştu');
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const getTrackingStatusText = (statusCode: string) => {
+    const statusMap: { [key: string]: { text: string; color: string } } = {
+      PENDING: { text: '⏳ Kargo bekleniyor', color: 'text-yellow-600' },
+      PICKED_UP: { text: '📦 Kargoya alındı', color: 'text-blue-600' },
+      IN_TRANSIT: { text: '🚚 Dağıtımda', color: 'text-purple-600' },
+      OUT_FOR_DELIVERY: { text: '🏃 Teslimat aşamasında', color: 'text-orange-600' },
+      DELIVERED: { text: '✅ Teslim edildi', color: 'text-green-600' },
+      FAILED: { text: '❌ Teslim başarısız', color: 'text-red-600' },
+      RETURNED: { text: '↩️ İade edildi', color: 'text-gray-600' },
+    };
+
+    return statusMap[statusCode] || { text: statusCode, color: 'text-gray-600' };
+  };
+
+  const getStatusCode = (status: any) => {
+    // Geliver API statusCode veya trackingStatusCode dönebilir
+    return status?.statusCode || status?.trackingStatusCode || 'UNKNOWN';
+  };
+
   // Cargo functions
   const getProviderName = (providerCode: string) => {
     const providers: { [key: string]: string } = {
@@ -252,6 +335,160 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
     return services[serviceCode] || serviceCode.replace(/_/g, ' ');
   };
 
+  // Desi hesaplama state'leri
+  const [desi, setDesi] = useState<number>(3);
+  const [showDesiCalculator, setShowDesiCalculator] = useState(false);
+  const [calculatorLength, setCalculatorLength] = useState<string>('30');
+  const [calculatorWidth, setCalculatorWidth] = useState<string>('20');
+  const [calculatorHeight, setCalculatorHeight] = useState<string>('15');
+  const [calculatedDesi, setCalculatedDesi] = useState<number>(0);
+
+  const calculateDesi = () => {
+    const l = parseFloat(calculatorLength) || 0;
+    const w = parseFloat(calculatorWidth) || 0;
+    const h = parseFloat(calculatorHeight) || 0;
+    const result = (l * w * h) / 3000;
+    setCalculatedDesi(result);
+    setDesi(result);
+  };
+
+  // Payment receipt functions
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Dosya boyutu 5MB\'dan küçük olmalıdır');
+        return;
+      }
+
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+      if (!allowedTypes.includes(file.type)) {
+        alert('Sadece JPEG, PNG ve PDF dosyaları yüklenebilir');
+        return;
+      }
+
+      setReceiptFile(file);
+    }
+  };
+
+  const handleUploadReceipt = async () => {
+    if (!receiptFile || !order) return;
+
+    setReceiptLoading(true);
+    try {
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        const base64Data = base64.split(',')[1]; // Remove data:image/jpeg;base64, prefix
+
+        const token = localStorage.getItem('token');
+        const response = await fetch(`/api/admin/orders/${order.id}/payment-receipt`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            fileBase64: base64Data,
+            fileName: receiptFile.name,
+            mimeType: receiptFile.type,
+          }),
+        });
+
+        if (response.ok) {
+          alert('Dekont başarıyla yüklendi');
+          setShowReceiptModal(false);
+          setReceiptFile(null);
+          await loadOrderDetail();
+        } else {
+          const data = await response.json();
+          alert(data.error || 'Dekont yükleme başarısız');
+        }
+      };
+      reader.readAsDataURL(receiptFile);
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Dekont yükleme hatası');
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  const handleDownloadReceipt = async () => {
+    if (!order) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/orders/${order.id}/payment-receipt`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const { base64, fileName, mimeType } = data.file;
+
+        // Create download link
+        const link = document.createElement('a');
+        link.href = `data:${mimeType};base64,${base64}`;
+        link.download = fileName || 'dekont';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        alert('Dekont indirilemedi');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Dekont indirme hatası');
+    }
+  };
+
+  const handleApprovePayment = async () => {
+    if (!order || !approvalAction) return;
+
+    if (approvalAction === 'REJECT' && !rejectionReason.trim()) {
+      alert('Red nedeni belirtilmelidir');
+      return;
+    }
+
+    setApprovalLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/orders/${order.id}/approve-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: approvalAction,
+          rejectionReason: approvalAction === 'REJECT' ? rejectionReason : undefined,
+        }),
+      });
+
+      if (response.ok) {
+        alert(approvalAction === 'APPROVE' ? 'Ödeme onaylandı' : 'Ödeme reddedildi');
+        setShowApprovalModal(false);
+        setApprovalAction(null);
+        setRejectionReason('');
+        await loadOrderDetail();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'İşlem başarısız');
+      }
+    } catch (error) {
+      console.error('Approval error:', error);
+      alert('İşlem hatası');
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
   const handleCreateShipment = async () => {
     if (!order) return;
 
@@ -266,8 +503,7 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
         },
         body: JSON.stringify({
           orderId: order.id,
-          // senderAddressId backend'den environment variable ile alınacak
-          test: true, // Test modu
+          desi: desi, // Desi bilgisini gönder
         }),
       });
 
@@ -623,72 +859,137 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
             ) : (
               /* Teklif kabul edildiyse - bilgileri göster */
               <div className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-green-800 mb-2">
-                    <span className="mr-2">✓</span>Kargo Etiketi Oluşturuldu
-                  </p>
-                  
-                  {order.cargoProvider && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-600">Kargo Firması</p>
-                      <p className="font-semibold text-gray-900">{order.cargoProvider}</p>
-                    </div>
-                  )}
+                {/* Teslim edilmemiş siparişler için kargo bilgileri */}
+                {order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'CANCELLED' && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-sm font-semibold text-green-800 mb-2">
+                      <span className="mr-2">✓</span>Kargo Etiketi Oluşturuldu
+                    </p>
+                    
+                    {order.cargoProvider && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-600">Kargo Firması</p>
+                        <p className="font-semibold text-gray-900">{order.cargoProvider}</p>
+                      </div>
+                    )}
 
-                  {order.cargoBarcode && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-600">Barkod</p>
-                      <p className="font-mono text-sm text-gray-900">{order.cargoBarcode}</p>
-                    </div>
-                  )}
+                    {order.cargoBarcode && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-600">Barkod</p>
+                        <p className="font-mono text-sm text-gray-900">{order.cargoBarcode}</p>
+                      </div>
+                    )}
 
-                  {order.cargoTrackingNumber && (
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-600">Takip Numarası</p>
-                      <p className="font-mono text-sm text-gray-900">{order.cargoTrackingNumber}</p>
-                    </div>
-                  )}
+                    {order.cargoTrackingNumber && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-600">Takip Numarası</p>
+                        <p className="font-mono text-sm text-gray-900">{order.cargoTrackingNumber}</p>
+                      </div>
+                    )}
 
-                  {order.cargoTrackingUrl && (
-                    <a
-                      href={order.cargoTrackingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-sm text-blue-600 hover:text-blue-700 underline mb-3"
-                    >
-                      🔗 Kargoyu Takip Et
-                    </a>
-                  )}
-                </div>
+                    {order.cargoTrackingUrl && (
+                      <a
+                        href={order.cargoTrackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-sm text-blue-600 hover:text-blue-700 underline mb-3"
+                      >
+                        🔗 Kargoyu Takip Et
+                      </a>
+                    )}
+                  </div>
+                )}
 
-                {/* Teklifleri Tekrar Görüntüleme Butonu */}
-                <button
-                  onClick={() => loadCargoOffers()}
-                  disabled={offersLoading}
-                  className="w-full bg-gradient-to-r from-gray-500 to-gray-600 text-white px-4 py-2 rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50 text-sm"
-                >
-                  {offersLoading ? 'Yükleniyor...' : '🔄 Teklifleri Tekrar Gör'}
-                </button>
+                {/* Güncel Kargo Durumu - Otomatik Yüklenir */}
+                {trackingLoading && !trackingInfo && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center justify-center gap-3">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                    <span className="text-sm text-gray-600">Kargo durumu sorgulanıyor...</span>
+                  </div>
+                )}
 
-                {/* Etiket İndirme Butonları */}
-                <div className="grid grid-cols-2 gap-3">
-                  {order.cargoLabelUrl && (
+                {trackingInfo?.trackingStatus && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <p className="text-xs text-gray-600 mb-2">Güncel Kargo Durumu</p>
+                    <p className={`font-semibold text-base ${getTrackingStatusText(getStatusCode(trackingInfo.trackingStatus)).color}`}>
+                      {getTrackingStatusText(getStatusCode(trackingInfo.trackingStatus)).text}
+                    </p>
+                    {(trackingInfo.trackingStatus.subStatusCode || trackingInfo.trackingStatus.trackingSubStatusCode) && (
+                      <p className="text-xs text-gray-600 mt-1">
+                        {trackingInfo.trackingStatus.subStatusCode || trackingInfo.trackingStatus.trackingSubStatusCode}
+                      </p>
+                    )}
+                    {trackingInfo.shipment?.updatedAt && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Son güncelleme: {formatDate(trackingInfo.shipment.updatedAt)}
+                      </p>
+                    )}
+                    {/* Yenile Butonu */}
                     <button
-                      onClick={() => handleDownloadLabel('pdf')}
-                      className="bg-red-500 text-white px-4 py-2 rounded-xl font-semibold hover:bg-red-600 transition text-sm"
+                      onClick={fetchTrackingInfo}
+                      disabled={trackingLoading}
+                      className="mt-3 w-full bg-blue-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-600 transition disabled:bg-gray-400"
                     >
-                      📄 PDF İndir
+                      {trackingLoading ? 'Güncelleniyor...' : '🔄 Yenile'}
                     </button>
-                  )}
-                  {order.cargoResponsiveLabelUrl && (
+                  </div>
+                )}
+
+                {trackingError && !trackingInfo && (
+                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl text-sm">
+                    <p className="font-medium mb-1">Kargo durumu alınamadı</p>
+                    <p className="text-xs">{trackingError}</p>
                     <button
-                      onClick={() => handleDownloadLabel('html')}
-                      className="bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-600 transition text-sm"
+                      onClick={fetchTrackingInfo}
+                      disabled={trackingLoading}
+                      className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
                     >
-                      📱 HTML İndir
+                      Tekrar dene
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* Teslim edilmemiş siparişler için ek butonlar */}
+                {order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'CANCELLED' && (
+                  <>
+                    {/* Teklifleri Tekrar Görüntüleme Butonu */}
+                    <button
+                      onClick={() => loadCargoOffers()}
+                      disabled={offersLoading}
+                      className="w-full bg-gradient-to-r from-gray-500 to-gray-600 text-white px-4 py-2 rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50 text-sm"
+                    >
+                      {offersLoading ? 'Yükleniyor...' : '🔄 Teklifleri Tekrar Gör'}
+                    </button>
+
+                    {/* Etiket İndirme Butonları */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {order.cargoLabelUrl && (
+                        <button
+                          onClick={() => handleDownloadLabel('pdf')}
+                          className="bg-red-500 text-white px-4 py-2 rounded-xl font-semibold hover:bg-red-600 transition text-sm"
+                        >
+                          📄 PDF İndir
+                        </button>
+                      )}
+                      {order.cargoResponsiveLabelUrl && (
+                        <button
+                          onClick={() => handleDownloadLabel('html')}
+                          className="bg-blue-500 text-white px-4 py-2 rounded-xl font-semibold hover:bg-blue-600 transition text-sm"
+                        >
+                          📱 HTML İndir
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Teslim edilen siparişler için bilgi mesajı */}
+                {order.orderStatus === 'DELIVERED' && (
+                  <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
+                    <p className="font-medium">✅ Sipariş teslim edildi</p>
+                    <p className="text-xs mt-1">İade işlemleri için müşteri hizmetleri ile iletişime geçiniz.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -744,6 +1045,99 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
                 <div>
                   <p className="text-sm text-gray-600 mb-1">İşlem ID</p>
                   <p className="font-mono text-sm text-gray-900">{order.paramposTransactionId}</p>
+                </div>
+              )}
+
+              {/* EFT/Havale Dekont Bölümü */}
+              {order.paymentMethod === 'BANK_TRANSFER' && (
+                <div className="border-t border-gray-200 pt-4 mt-4">
+                  <h3 className="font-semibold text-gray-900 mb-3">💳 Dekont İşlemleri</h3>
+                  
+                  {/* Dekont Yükleme */}
+                  {!order.paymentReceiptBase64 && order.paymentStatus === 'PENDING' && (
+                    <button
+                      onClick={() => setShowReceiptModal(true)}
+                      className="w-full bg-blue-500 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-600 transition mb-3"
+                    >
+                      📎 Dekont Yükle
+                    </button>
+                  )}
+
+                  {/* Dekont Yüklendi */}
+                  {order.paymentReceiptBase64 && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-3">
+                      <p className="text-sm font-semibold text-green-900 mb-2">
+                        ✓ Dekont yüklendi
+                      </p>
+                      <p className="text-xs text-green-700 mb-2">
+                        Dosya: {order.paymentReceiptFileName}
+                      </p>
+                      <p className="text-xs text-green-600 mb-3">
+                        {order.paymentReceiptUploadedAt && `Yüklenme: ${formatDate(order.paymentReceiptUploadedAt)}`}
+                      </p>
+                      <button
+                        onClick={handleDownloadReceipt}
+                        className="w-full bg-green-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-green-700 transition"
+                      >
+                        📥 Dekont İndir
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Onay Durumu */}
+                  {order.paymentApprovedAt && (
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-green-900">
+                        ✅ Ödeme Onaylandı
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        {formatDate(order.paymentApprovedAt)}
+                      </p>
+                    </div>
+                  )}
+
+                  {order.paymentRejectedAt && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-red-900">
+                        ❌ Ödeme Reddedildi
+                      </p>
+                      <p className="text-xs text-red-700 mt-1">
+                        {formatDate(order.paymentRejectedAt)}
+                      </p>
+                      {order.paymentRejectionReason && (
+                        <p className="text-xs text-red-600 mt-2">
+                          Neden: {order.paymentRejectionReason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Onay Butonları */}
+                  {order.paymentReceiptBase64 && 
+                   !order.paymentApprovedAt && 
+                   !order.paymentRejectedAt && 
+                   order.paymentStatus === 'PENDING' && (
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <button
+                        onClick={() => {
+                          setApprovalAction('APPROVE');
+                          setShowApprovalModal(true);
+                        }}
+                        className="bg-green-500 text-white px-4 py-3 rounded-xl font-semibold hover:bg-green-600 transition text-sm"
+                      >
+                        ✓ Onayla
+                      </button>
+                      <button
+                        onClick={() => {
+                          setApprovalAction('REJECT');
+                          setShowApprovalModal(true);
+                        }}
+                        className="bg-red-500 text-white px-4 py-3 rounded-xl font-semibold hover:bg-red-600 transition text-sm"
+                      >
+                        ✗ Reddet
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -804,6 +1198,90 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
                 <p className="text-sm text-gray-600 mb-2">Müşteri: <span className="font-semibold">{order?.customer.name}</span></p>
                 <p className="text-sm text-gray-600">Adres: <span className="font-semibold">{order?.shippingAddress.city} / {order?.shippingAddress.district}</span></p>
               </div>
+
+              {/* Desi Girişi */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Desi (kg)
+                </label>
+                <div className="flex gap-3">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={desi}
+                    onChange={(e) => setDesi(parseFloat(e.target.value) || 0)}
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="Örn: 3.5"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDesiCalculator(!showDesiCalculator)}
+                    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-medium"
+                  >
+                    🧮 Hesapla
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Tahmini paket desisi (kargo teklifi için kullanılacak)</p>
+              </div>
+
+              {/* Desi Hesaplama Aracı */}
+              {showDesiCalculator && (
+                <div className="mb-6 bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Desi Hesaplama
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Uzunluk (cm)</label>
+                      <input
+                        type="number"
+                        value={calculatorLength}
+                        onChange={(e) => setCalculatorLength(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                        placeholder="30"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Genişlik (cm)</label>
+                      <input
+                        type="number"
+                        value={calculatorWidth}
+                        onChange={(e) => setCalculatorWidth(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                        placeholder="20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Yükseklik (cm)</label>
+                      <input
+                        type="number"
+                        value={calculatorHeight}
+                        onChange={(e) => setCalculatorHeight(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                        placeholder="15"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={calculateDesi}
+                    className="w-full px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition font-medium text-sm mb-2"
+                  >
+                    Hesapla
+                  </button>
+                  {calculatedDesi > 0 && (
+                    <div className="bg-white rounded-lg p-3 border border-orange-200">
+                      <p className="text-xs text-gray-600 mb-1">Hesaplanan Desi:</p>
+                      <p className="text-2xl font-bold text-orange-600">{calculatedDesi.toFixed(2)} kg</p>
+                      <p className="text-xs text-gray-500 mt-1">Formül: (U × G × Y) ÷ 3000</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3 mt-6">
                 <button
@@ -985,6 +1463,169 @@ export default function AdminOrderDetailPage({ params }: { params: { id: string 
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50"
                 >
                   {updating ? 'Güncelleniyor...' : 'Güncelle'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dekont Yükleme Modal */}
+      {showReceiptModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full">
+            <div className="border-b border-gray-200 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-bold text-gray-900">Dekont Yükle</h3>
+                <button
+                  onClick={() => {
+                    setShowReceiptModal(false);
+                    setReceiptFile(null);
+                  }}
+                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
+                >
+                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  Dekont Dosyası
+                </label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,application/pdf"
+                  onChange={handleFileSelect}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Maksimum 5MB • JPEG, PNG veya PDF
+                </p>
+              </div>
+
+              {receiptFile && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+                  <p className="text-sm text-green-900 font-medium">
+                    ✓ {receiptFile.name}
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    {(receiptFile.size / 1024).toFixed(2)} KB
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReceiptModal(false);
+                    setReceiptFile(null);
+                  }}
+                  disabled={receiptLoading}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleUploadReceipt}
+                  disabled={receiptLoading || !receiptFile}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50"
+                >
+                  {receiptLoading ? 'Yükleniyor...' : 'Yükle'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ödeme Onay/Red Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full">
+            <div className="border-b border-gray-200 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-bold text-gray-900">
+                  {approvalAction === 'APPROVE' ? 'Ödemeyi Onayla' : 'Ödemeyi Reddet'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowApprovalModal(false);
+                    setApprovalAction(null);
+                    setRejectionReason('');
+                  }}
+                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
+                >
+                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              {approvalAction === 'APPROVE' ? (
+                <div className="mb-6">
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p className="text-sm text-green-900">
+                      <span className="font-semibold">⚠️ Dikkat:</span> Ödemeyi onayladığınızda:
+                    </p>
+                    <ul className="text-xs text-green-800 mt-2 ml-4 list-disc space-y-1">
+                      <li>Sipariş durumu "Hazırlanıyor" olarak güncellenecek</li>
+                      <li>Ürün stokları düşecek</li>
+                      <li>İşlem geri alınamaz</li>
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Red Nedeni <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Ödeme red nedenini açıklayın..."
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Bu bilgi müşteriye iletilecektir.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowApprovalModal(false);
+                    setApprovalAction(null);
+                    setRejectionReason('');
+                  }}
+                  disabled={approvalLoading}
+                  className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  İptal
+                </button>
+                <button
+                  onClick={handleApprovePayment}
+                  disabled={approvalLoading}
+                  className={`flex-1 px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition disabled:opacity-50 ${
+                    approvalAction === 'APPROVE'
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                      : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                  }`}
+                >
+                  {approvalLoading
+                    ? 'İşleniyor...'
+                    : approvalAction === 'APPROVE'
+                    ? '✓ Onayla'
+                    : '✗ Reddet'}
                 </button>
               </div>
             </div>

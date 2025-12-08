@@ -50,6 +50,7 @@ interface OrderDetails {
   notes: string | null;
   items: OrderItem[];
   // Geliver kargo bilgileri
+  geliverShipmentId: string | null;
   cargoProvider: string | null;
   cargoTrackingUrl: string | null;
   cargoTrackingNumber: string | null;
@@ -61,10 +62,20 @@ export default function OrderDetailPage({ params }: { params: { orderNumber: str
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [trackingInfo, setTrackingInfo] = useState<any>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingError, setTrackingError] = useState('');
 
   useEffect(() => {
     fetchOrderDetails();
   }, [params.orderNumber]);
+
+  // Sipariş yüklendikten sonra kargo durumunu otomatik çek
+  useEffect(() => {
+    if (order && order.geliverShipmentId && !trackingInfo) {
+      fetchTrackingInfo();
+    }
+  }, [order]);
 
   const fetchOrderDetails = async () => {
     setLoading(true);
@@ -166,6 +177,61 @@ export default function OrderDetailPage({ params }: { params: { orderNumber: str
     }).format(price);
   };
 
+  const fetchTrackingInfo = async () => {
+    if (!order) return;
+    
+    setTrackingLoading(true);
+    setTrackingError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setTrackingError('Oturum bulunamadı');
+        return;
+      }
+
+      const response = await fetch(`/api/orders/${params.orderNumber}/track`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Takip bilgisi alınamadı');
+      }
+
+      const data = await response.json();
+      setTrackingInfo(data.tracking);
+      
+      // Reload order to get updated status
+      await fetchOrderDetails();
+    } catch (err: any) {
+      setTrackingError(err.message || 'Bir hata oluştu');
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const getTrackingStatusText = (statusCode: string) => {
+    const statusMap: { [key: string]: { text: string; color: string } } = {
+      PENDING: { text: '⏳ Kargo bekleniyor', color: 'text-yellow-600' },
+      PICKED_UP: { text: '📦 Kargoya alındı', color: 'text-blue-600' },
+      IN_TRANSIT: { text: '🚚 Dağıtımda', color: 'text-purple-600' },
+      OUT_FOR_DELIVERY: { text: '🏃 Teslimat aşamasında', color: 'text-orange-600' },
+      DELIVERED: { text: '✅ Teslim edildi', color: 'text-green-600' },
+      FAILED: { text: '❌ Teslim başarısız', color: 'text-red-600' },
+      RETURNED: { text: '↩️ İade edildi', color: 'text-gray-600' },
+    };
+
+    return statusMap[statusCode] || { text: statusCode, color: 'text-gray-600' };
+  };
+
+  const getStatusCode = (status: any) => {
+    // Geliver API statusCode veya trackingStatusCode dönebilir
+    return status?.statusCode || status?.trackingStatusCode || 'UNKNOWN';
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -232,6 +298,71 @@ export default function OrderDetailPage({ params }: { params: { orderNumber: str
               {getStatusBadge(order.orderStatus)}
             </div>
           </div>
+
+          {/* Debug: Payment Status */}
+          <div className="bg-blue-50 p-4 rounded mt-4 text-sm">
+            <strong>Debug:</strong> Payment Status = "{order.paymentStatus}" 
+            (Type: {typeof order.paymentStatus})
+            {order.paymentStatus === 'PENDING' ? ' ✅ MATCH' : ' ❌ NO MATCH'}
+          </div>
+
+          {/* Ödeme Beklemede ise Tekrar Dene Butonu */}
+          {order.paymentStatus === 'PENDING' && (
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mt-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0">
+                  <svg className="w-8 h-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+                    Ödeme Beklemede
+                  </h3>
+                  <p className="text-yellow-800 mb-4">
+                    Siparişinizin ödemesi henüz tamamlanmamış. Ödemeyi tekrar denemek için aşağıdaki butona tıklayabilirsiniz.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch('/api/payment/process', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                          },
+                          body: JSON.stringify({
+                            orderId: order.id,
+                            orderNumber: order.orderNumber,
+                            amount: order.total,
+                            use3DSecure: true
+                          })
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success && data.redirectUrl) {
+                          window.location.href = data.redirectUrl;
+                        } else {
+                          alert(data.message || 'Ödeme başlatılamadı');
+                        }
+                      } catch (error) {
+                        console.error('Payment retry error:', error);
+                        alert('Bir hata oluştu. Lütfen tekrar deneyin.');
+                      }
+                    }}
+                    className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors font-semibold inline-flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    Ödemeyi Tekrar Dene
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -385,6 +516,55 @@ export default function OrderDetailPage({ params }: { params: { orderNumber: str
                     </div>
                   )}
 
+                  {/* Güncel Kargo Durumu - Otomatik Yüklenir */}
+                  {trackingLoading && !trackingInfo && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                      <span className="text-gray-600">Kargo durumu sorgulanıyor...</span>
+                    </div>
+                  )}
+
+                  {trackingInfo?.status && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-2">Güncel Kargo Durumu</p>
+                      <p className={`font-semibold text-lg ${getTrackingStatusText(getStatusCode(trackingInfo.status)).color}`}>
+                        {getTrackingStatusText(getStatusCode(trackingInfo.status)).text}
+                      </p>
+                      {(trackingInfo.status.subStatusCode || trackingInfo.status.trackingSubStatusCode) && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          {trackingInfo.status.subStatusCode || trackingInfo.status.trackingSubStatusCode}
+                        </p>
+                      )}
+                      {trackingInfo.lastUpdate && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          Son güncelleme: {formatDate(trackingInfo.lastUpdate)}
+                        </p>
+                      )}
+                      {/* Manuel Güncelleme Butonu */}
+                      <button
+                        onClick={fetchTrackingInfo}
+                        disabled={trackingLoading}
+                        className="mt-3 w-full bg-blue-500 text-white px-3 py-2 rounded text-sm hover:bg-blue-600 transition-colors disabled:bg-gray-400"
+                      >
+                        {trackingLoading ? 'Güncelleniyor...' : '🔄 Yenile'}
+                      </button>
+                    </div>
+                  )}
+
+                  {trackingError && !trackingInfo && (
+                    <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm">
+                      <p className="font-medium mb-1">Kargo durumu alınamadı</p>
+                      <p className="text-xs">{trackingError}</p>
+                      <button
+                        onClick={fetchTrackingInfo}
+                        disabled={trackingLoading}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Tekrar dene
+                      </button>
+                    </div>
+                  )}
+
                   {order.cargoTrackingUrl ? (
                     <a
                       href={order.cargoTrackingUrl}
@@ -392,7 +572,7 @@ export default function OrderDetailPage({ params }: { params: { orderNumber: str
                       rel="noopener noreferrer"
                       className="block w-full bg-orange-500 text-white px-4 py-3 rounded-lg hover:bg-orange-600 transition-colors text-center font-medium"
                     >
-                      🔍 Kargoyu Takip Et
+                      🔍 Kargo Sitesinde Takip Et
                     </a>
                   ) : (
                     <button 

@@ -9,7 +9,7 @@ import { logActivity } from '@/lib/activityLogger';
  */
 export async function POST(request: Request) {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
     
     // ParamPOS hem form-data hem de JSON gönderebilir
     let data: any = {};
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL}/order/error?message=${encodeURIComponent(resultMessage || 'Ödeme başarısız')}`
+        `${baseUrl}/order/error?message=${encodeURIComponent(resultMessage || 'Ödeme başarısız')}`
       );
     }
 
@@ -152,14 +152,13 @@ export async function POST(request: Request) {
     }
 
     // Başarı sayfasına yönlendir
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
     return NextResponse.redirect(
       `${baseUrl}/order/success?orderNumber=${order.orderNumber}`
     );
   } catch (error: any) {
     console.error('3D Secure callback error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/checkout?payment=failed&message=Callback+hatasi:+${encodeURIComponent(error.message)}`
+      `${baseUrl}/checkout?payment=failed&message=Callback+hatasi:+${encodeURIComponent(error.message)}`
     );
   }
 }
@@ -169,6 +168,7 @@ export async function POST(request: Request) {
  */
 export async function GET(req: NextRequest) {
   try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
     const searchParams = req.nextUrl.searchParams;
     
     // Query parametrelerini object'e dönüştür
@@ -186,24 +186,24 @@ export async function GET(req: NextRequest) {
 
     if (!orderId) {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/checkout?payment=failed&message=Siparis+ID+bulunamadi`
+        `${baseUrl}/checkout?payment=failed&message=Siparis+ID+bulunamadi`
       );
     }
 
     if (result !== '1') {
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL}/checkout?payment=failed&orderId=${orderId}&message=${encodeURIComponent(resultMessage || '3D Secure dogrulama basarisiz')}`
+        `${baseUrl}/checkout?payment=failed&orderId=${orderId}&message=${encodeURIComponent(resultMessage || '3D Secure dogrulama basarisiz')}`
       );
     }
 
     // Başarılı ödeme - sipariş sayfasına yönlendir
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/order/success?orderId=${orderId}`
+      `${baseUrl}/order/success?orderId=${orderId}`
     );
   } catch (error: any) {
     console.error('3D Secure GET callback error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/checkout?payment=failed&message=Callback+hatasi`
+      `${baseUrl}/checkout?payment=failed&message=Callback+hatasi`
     );
   }
 }

@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "cron:cargo": "node scripts/cargo-cron.js"
   },
   "dependencies": {
     "@geliver/sdk": "^0.2.0",

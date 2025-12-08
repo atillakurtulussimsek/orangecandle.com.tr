@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/contexts/CartContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -27,6 +28,7 @@ type CheckoutStep = 'cart-review' | 'address-selection' | 'payment';
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getSubtotal, getDiscount, getTotal, clearCart, removeFromCart, updateQuantity } = useCart();
+  const settings = useSettings();
   
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('cart-review');
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ export default function CheckoutPage() {
   const subtotal = getSubtotal();
   const discount = getDiscount();
   const total = getTotal();
-  const shipping = total >= 500 ? 0 : 29.99;
+  const shipping = total >= settings.shipping.freeShippingThreshold ? 0 : settings.shipping.defaultShippingCost;
   const finalTotal = total + shipping;
 
   useEffect(() => {

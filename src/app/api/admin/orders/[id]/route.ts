@@ -127,6 +127,15 @@ export async function GET(
       paramposTransactionId: order.paramposTransactionId,
       paramposOrderId: order.paramposOrderId,
       
+      // Payment Receipt bilgileri
+      paymentReceiptBase64: order.paymentReceiptBase64,
+      paymentReceiptFileName: order.paymentReceiptFileName,
+      paymentReceiptMimeType: order.paymentReceiptMimeType,
+      paymentReceiptUploadedAt: order.paymentReceiptUploadedAt,
+      paymentApprovedAt: order.paymentApprovedAt,
+      paymentRejectedAt: order.paymentRejectedAt,
+      paymentRejectionReason: order.paymentRejectionReason,
+      
       // Ürünler
       items: order.items.map((item) => ({
         id: item.id,

@@ -154,7 +154,7 @@ export default function AdminLayout({
               <div>
                 <span className="text-xl font-bold">
                   <span className="text-orange-500">Orange</span>
-                  <span className="text-gray-800"> Sistem Yöneticisi</span>
+                  <span className="text-gray-800"> Candle</span>
                 </span>
               </div>
             </Link>

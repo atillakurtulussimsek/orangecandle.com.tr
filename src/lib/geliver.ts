@@ -1,18 +1,21 @@
 import { GeliverClient } from '@geliver/sdk';
+import { getGeliverConfig } from './settings';
 
 // Geliver Client Singleton
 let geliverClient: GeliverClient | null = null;
 
-export function getGeliverClient(): GeliverClient {
+export async function getGeliverClient(): Promise<GeliverClient> {
   if (!geliverClient) {
-    const token = process.env.GELIVER_TOKEN;
-    if (!token) {
-      throw new Error('GELIVER_TOKEN is not configured in environment variables');
+    // Veritabanından ayarları al
+    const config = await getGeliverConfig();
+    
+    if (!config.apiToken) {
+      throw new Error('Geliver API token ayarlanmamış. Lütfen admin panelinden Geliver ayarlarını yapılandırın.');
     }
 
     geliverClient = new GeliverClient({
-      token,
-      baseUrl: process.env.GELIVER_BASE_URL || 'https://api.geliver.io/api/v1',
+      token: config.apiToken,
+      baseUrl: 'https://api.geliver.io/api/v1',
       timeoutMs: 30000,
       maxRetries: 2,
     });
@@ -36,7 +39,7 @@ export interface CreateSenderParams {
 }
 
 export async function createSenderAddress(params: CreateSenderParams) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
   
   try {
     const sender = await client.addresses.createSender({
@@ -91,7 +94,7 @@ export interface CreateShipmentParams {
 }
 
 export async function createShipment(params: CreateShipmentParams) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     const shipmentData = {
@@ -132,7 +135,7 @@ export async function createShipment(params: CreateShipmentParams) {
 
 // Teklifleri Getirme
 export async function getShipmentOffers(shipmentId: string) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     const shipment = await client.shipments.get(shipmentId);
@@ -165,8 +168,8 @@ export async function getShipmentOffers(shipmentId: string) {
 }
 
 // Teklifi Kabul Etme
-export async function acceptOffer(offerId: string) {
-  const client = getGeliverClient();
+export async function acceptShipmentOffer(offerId: string) {
+  const client = await getGeliverClient();
 
   try {
     const transaction = await client.transactions.acceptOffer(offerId);
@@ -194,8 +197,8 @@ export async function acceptOffer(offerId: string) {
 }
 
 // Etiket İndirme (PDF)
-export async function downloadLabelPDF(labelURL: string) {
-  const client = getGeliverClient();
+export async function downloadLabel(labelURL: string) {
+  const client = await getGeliverClient();
 
   try {
     const pdfBytes = await client.shipments.downloadLabelByUrl(labelURL);
@@ -214,8 +217,8 @@ export async function downloadLabelPDF(labelURL: string) {
 }
 
 // Etiket İndirme (HTML - Responsive)
-export async function downloadLabelHTML(responsiveLabelURL: string) {
-  const client = getGeliverClient();
+export async function downloadResponsiveLabel(responsiveLabelURL: string) {
+  const client = await getGeliverClient();
 
   try {
     const html = await client.shipments.downloadResponsiveLabelByUrl(responsiveLabelURL);
@@ -235,11 +238,20 @@ export async function downloadLabelHTML(responsiveLabelURL: string) {
 
 // Gönderi Takip Bilgisi
 export async function getShipmentTracking(shipmentId: string) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
+    console.log(`\n🔍 Geliver Tracking - Shipment ID: ${shipmentId}`);
     const shipment = await client.shipments.get(shipmentId);
+    
+    console.log('📦 RAW SHIPMENT DATA:', JSON.stringify(shipment, null, 2));
+    
     const trackingStatus = (shipment as any).trackingStatus;
+    
+    console.log('📍 TRACKING STATUS:', JSON.stringify(trackingStatus, null, 2));
+    console.log('🔗 Tracking URL:', (shipment as any).trackingUrl);
+    console.log('🔢 Tracking Number:', (shipment as any).trackingNumber);
+    console.log('📊 Barcode:', (shipment as any).barcode);
 
     return {
       success: true,
@@ -252,7 +264,7 @@ export async function getShipmentTracking(shipmentId: string) {
       },
     };
   } catch (error: any) {
-    console.error('Geliver getTracking error:', error);
+    console.error('❌ Geliver getTracking error:', error);
     return {
       success: false,
       error: error.message || 'Takip bilgisi alınamadı',
@@ -263,7 +275,7 @@ export async function getShipmentTracking(shipmentId: string) {
 
 // Gönderi İptal Etme
 export async function cancelShipment(shipmentId: string) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     await client.shipments.cancel(shipmentId);
@@ -290,7 +302,7 @@ export interface CreateReturnParams {
 }
 
 export async function createReturnShipment(params: CreateReturnParams) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     const returnShipment = await client.shipments.createReturn(
@@ -318,7 +330,7 @@ export async function createReturnShipment(params: CreateReturnParams) {
 
 // Şehir Listesi
 export async function getCities(countryCode: string = 'TR') {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     const cities = await client.geo.listCities(countryCode);
@@ -338,7 +350,7 @@ export async function getCities(countryCode: string = 'TR') {
 
 // İlçe Listesi
 export async function getDistricts(countryCode: string = 'TR', cityCode: string) {
-  const client = getGeliverClient();
+  const client = await getGeliverClient();
 
   try {
     const districts = await client.geo.listDistricts(countryCode, cityCode);

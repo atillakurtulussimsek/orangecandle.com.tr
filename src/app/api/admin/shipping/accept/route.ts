@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/prisma';
-import { acceptOffer } from '@/lib/geliver';
+import { acceptShipmentOffer } from '@/lib/geliver';
 import { logActivity } from '@/lib/activityLogger';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Accept offer with Geliver
-    const result = await acceptOffer(offerId);
+    const result = await acceptShipmentOffer(offerId);
 
     if (!result.success) {
       await logActivity({

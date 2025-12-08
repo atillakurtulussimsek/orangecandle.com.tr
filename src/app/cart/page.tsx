@@ -1,6 +1,7 @@
 'use client';
 
 import { useCart } from '@/contexts/CartContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,11 +9,12 @@ import { useRouter } from 'next/navigation';
 export default function CartPage() {
   const router = useRouter();
   const { items, removeFromCart, updateQuantity, clearCart, getSubtotal, getDiscount, getTotal } = useCart();
+  const settings = useSettings();
 
   const subtotal = getSubtotal();
   const discount = getDiscount();
   const total = getTotal();
-  const shipping = total >= 500 ? 0 : 29.99;
+  const shipping = total >= settings.shipping.freeShippingThreshold ? 0 : settings.shipping.defaultShippingCost;
   const finalTotal = total + shipping;
 
   if (items.length === 0) {
@@ -250,14 +252,14 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {total < 500 && (
+                {total < settings.shipping.freeShippingThreshold && (
                   <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
                     <div className="flex items-start gap-2">
                       <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <span>
-                        <strong>₺{(500 - total).toFixed(2)}</strong> daha alışveriş yapın, <strong>kargo ücretsiz</strong> olsun!
+                        <strong>₺{(settings.shipping.freeShippingThreshold - total).toFixed(2)}</strong> daha alışveriş yapın, <strong>kargo ücretsiz</strong> olsun!
                       </span>
                     </div>
                   </div>

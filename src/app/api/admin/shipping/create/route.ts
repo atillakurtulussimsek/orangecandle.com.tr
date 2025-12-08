@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { orderId, senderAddressId, test = true } = body;
+    const { orderId, senderAddressId, desi } = body;
 
     if (!orderId) {
       return NextResponse.json(
@@ -36,14 +36,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Sender address ID kontrolü - environment variable'dan al veya parametre olarak gelsin
-    let finalSenderAddressId = senderAddressId || process.env.GELIVER_SENDER_ADDRESS_ID;
+    if (!desi || desi <= 0) {
+      return NextResponse.json(
+        { error: 'Geçerli bir desi değeri giriniz' },
+        { status: 400 }
+      );
+    }
+
+    // Geliver ayarlarını veritabanından al
+    const { getGeliverConfig } = await import('@/lib/settings');
+    const geliverConfig = await getGeliverConfig();
+    const test = geliverConfig.testMode; // Veritabanından test modu ayarını al
+
+    // Sender address ID kontrolü - önce parametre, sonra veritabanı, en son environment variable
+    let finalSenderAddressId = senderAddressId;
+    
+    if (!finalSenderAddressId) {
+      // Veritabanından al
+      finalSenderAddressId = geliverConfig.senderAddressId;
+    }
+    
+    if (!finalSenderAddressId) {
+      // Environment variable'dan al (fallback)
+      finalSenderAddressId = process.env.GELIVER_SENDER_ADDRESS_ID;
+    }
 
     if (!finalSenderAddressId) {
       return NextResponse.json(
         {
           error: 'Gönderici adresi bulunamadı',
-          hint: 'Lütfen önce /api/admin/shipping/sender endpoint\'ine POST isteği göndererek gönderici adresi oluşturun veya GELIVER_SENDER_ADDRESS_ID environment variable\'ını ayarlayın.',
+          hint: 'Lütfen admin panelinden Geliver ayarlarını yapılandırın veya /api/admin/shipping/sender endpoint\'ine POST isteği göndererek gönderici adresi oluşturun.',
         },
         { status: 400 }
       );
@@ -77,11 +99,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Calculate package dimensions (örnek değerler, gerçek ürün boyutlarını kullanabilirsiniz)
+    // Calculate package dimensions based on desi
+    // Desi formülü: (uzunluk × genişlik × yükseklik) / 3000 = desi
+    // Standart oran kullanarak boyutları hesaplıyoruz (30:20:15 oranı)
+    const desiVolume = desi * 3000; // cm³
+    const ratio = Math.cbrt(desiVolume / 9000); // (30*20*15 = 9000)
+    const length = (30 * ratio).toFixed(1);
+    const width = (20 * ratio).toFixed(1);
+    const height = (15 * ratio).toFixed(1);
+
+    // Weight calculation from order items
     const totalWeight = order.items.reduce((sum, item) => {
       const weight = item.product?.weight ? parseFloat(item.product.weight) : 0.5;
       return sum + weight * item.quantity;
     }, 0);
+
+    // Desi ve gerçek ağırlıktan büyük olanı kullan
+    const effectiveWeight = Math.max(desi, totalWeight);
 
     // Format phone number (add +90 prefix for international format)
     const formatPhone = (phone: string) => {
@@ -108,10 +142,10 @@ export async function POST(req: NextRequest) {
         districtName: order.shippingDistrict,
         zip: order.shippingZipCode,
       },
-      length: '30.0', // cm
-      width: '20.0', // cm
-      height: '15.0', // cm
-      weight: totalWeight.toFixed(1), // kg
+      length: length, // cm - desiden hesaplanan
+      width: width, // cm - desiden hesaplanan
+      height: height, // cm - desiden hesaplanan
+      weight: effectiveWeight.toFixed(1), // kg - desi veya gerçek ağırlıktan büyük olanı
       orderNumber: order.orderNumber,
       totalAmount: order.total.toString(),
       sourceIdentifier: process.env.NEXT_PUBLIC_SITE_URL || 'https://orangecandle.com.tr',

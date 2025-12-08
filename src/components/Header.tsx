@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useWishlist } from '@/contexts/WishlistContext';
 import { useCart } from '@/contexts/CartContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import CartSidebar from './CartSidebar';
 
 export default function Header() {
@@ -15,6 +16,10 @@ export default function Header() {
   const { itemCount } = useWishlist();
   const { getItemCount } = useCart();
   const cartItemCount = getItemCount();
+  const settings = useSettings();
+
+  const freeShippingThreshold = settings.shipping.freeShippingThreshold;
+  const contactEmail = settings.site.contactEmail;
 
   useEffect(() => {
     // Check if user is logged in
@@ -55,14 +60,14 @@ export default function Header() {
         <div className="container mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <a href="mailto:info@orangecandle.com.tr" className="flex items-center gap-2 hover:text-orange-400 transition">
+              <a href={`mailto:${contactEmail}`} className="flex items-center gap-2 hover:text-orange-400 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                info@orangecandle.com.tr
+                {contactEmail}
               </a>
               <span className="text-gray-400">|</span>
-              <span className="text-orange-400">🔥 500 TL üzeri ücretsiz kargo!</span>
+              <span className="text-orange-400">🔥 {freeShippingThreshold} TL üzeri ücretsiz kargo!</span>
             </div>
             <div className="flex items-center gap-4">
               <Link href="/track-order" className="hover:text-orange-400 transition">

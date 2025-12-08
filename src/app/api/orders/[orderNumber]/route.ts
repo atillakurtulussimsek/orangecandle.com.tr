@@ -110,6 +110,7 @@ export async function GET(
       })),
       trackingNumber: order.trackingNumber,
       // Geliver kargo bilgileri
+      geliverShipmentId: order.geliverShipmentId,
       cargoProvider: order.cargoProvider,
       cargoTrackingUrl: order.cargoTrackingUrl,
       cargoTrackingNumber: order.cargoTrackingNumber,

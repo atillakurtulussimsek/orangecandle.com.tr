@@ -1,0 +1,15 @@
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  category    String   // general, shipping, payment, email, seo, social, geliver, parampos
+  label       String
+  type        String   // text, number, boolean, email, url, textarea, select
+  description String?  @db.Text
+  options     String?  @db.Text // JSON array for select type
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("site_settings")
+}

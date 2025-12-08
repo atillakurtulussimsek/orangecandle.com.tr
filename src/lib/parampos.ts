@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getParamPOSConfig } from './settings';
 
 interface ParamPOSConfig {
   clientCode: string;
@@ -37,16 +38,27 @@ interface PaymentResponse {
 }
 
 export class ParamPOSService {
-  private config: ParamPOSConfig;
+  private config: ParamPOSConfig | null = null;
 
   constructor() {
-    this.config = {
-      clientCode: process.env.PARAMPOS_CLIENT_CODE || '10738',
-      clientUsername: process.env.PARAMPOS_CLIENT_USERNAME || 'Test',
-      clientPassword: process.env.PARAMPOS_CLIENT_PASSWORD || 'Test',
-      guid: process.env.PARAMPOS_GUID || '0c13d406-873b-403b-9c09-a5766840d98c',
-      baseUrl: process.env.PARAMPOS_URL || 'https://testposws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx',
-    };
+    // Config will be loaded on first use
+  }
+
+  /**
+   * Load configuration from database
+   */
+  private async loadConfig(): Promise<ParamPOSConfig> {
+    if (!this.config) {
+      const dbConfig = await getParamPOSConfig();
+      this.config = {
+        clientCode: dbConfig.clientCode,
+        clientUsername: dbConfig.clientUsername,
+        clientPassword: dbConfig.clientPassword,
+        guid: dbConfig.guid,
+        baseUrl: dbConfig.baseUrl,
+      };
+    }
+    return this.config;
   }
 
   /**
@@ -125,15 +137,16 @@ export class ParamPOSService {
    * SOAP Request gönderme
    */
   private async sendSOAPRequest(method: string, params: any): Promise<any> {
+    const config = await this.loadConfig();
     const xml = this.createXMLRequest(method, params);
 
     console.log('=== SOAP REQUEST ===');
     console.log('Method:', method);
-    console.log('URL:', this.config.baseUrl);
+    console.log('URL:', config.baseUrl);
     console.log('XML:', xml);
 
     try {
-      const response = await fetch(this.config.baseUrl, {
+      const response = await fetch(config.baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/xml; charset=utf-8',
@@ -159,6 +172,7 @@ export class ParamPOSService {
    * Ödeme işlemi (Non-3D)
    */
   async processPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const {
         orderId,
@@ -177,22 +191,22 @@ export class ParamPOSService {
       const totalAmount = this.formatAmount(amount);
 
       // HASH oluşturma
-      const hashData = `${this.config.clientCode}${this.config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
+      const hashData = `${config.clientCode}${config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
       const hash = this.generateHash(hashData);
 
       // Card expiry parse (MMYY)
-      const expiryMonth = cardExpiry.substring(0, 2);
-      const expiryYear = cardExpiry.substring(2, 4);
+      const expiryMonth = cardExpiry!.substring(0, 2);
+      const expiryYear = cardExpiry!.substring(2, 4);
 
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         KK_Sahibi: cardHolderName,
-        KK_No: cardNumber.replace(/\s/g, ''),
+        KK_No: cardNumber!.replace(/\s/g, ''),
         KK_SK_Ay: expiryMonth,
         KK_SK_Yil: expiryYear,
         KK_CVC: cardCvv,
@@ -257,6 +271,7 @@ export class ParamPOSService {
     installment?: number;
     maxInstallment?: number;
   }): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const {
         orderId,
@@ -274,10 +289,10 @@ export class ParamPOSService {
       // TP_Modal_Payment için özel parametre yapısı
       const params = {
         d: {
-          Code: this.config.clientCode,
-          User: this.config.clientUsername,
-          Pass: this.config.clientPassword,
-          GUID: this.config.guid,
+          Code: config.clientCode,
+          User: config.clientUsername,
+          Pass: config.clientPassword,
+          GUID: config.guid,
           GSM: customerPhone || '',
           Amount: formattedAmount,
           Order_ID: orderId,
@@ -350,6 +365,7 @@ export class ParamPOSService {
     failUrl?: string;
     installment?: number;
   }): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const {
         orderId,
@@ -365,7 +381,7 @@ export class ParamPOSService {
       const totalAmount = this.formatAmount(amount);
 
       // HASH oluşturma
-      const hashData = `${this.config.clientCode}${this.config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
+      const hashData = `${config.clientCode}${config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
       const hash = this.generateHash(hashData);
 
       // Parampos TEST KARTI (Production'da gerçek kart girilecek)
@@ -379,11 +395,11 @@ export class ParamPOSService {
 
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         KK_Sahibi: testCard.cardHolderName,
         KK_No: testCard.cardNumber,
         KK_SK_Ay: testCard.cardExpiry.substring(0, 2),
@@ -468,6 +484,7 @@ export class ParamPOSService {
    * NOT: Bu metod kart bilgilerini alır - güvenlik için generatePaymentPageUrl kullanın
    */
   async init3DSecurePayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const {
         orderId,
@@ -488,21 +505,21 @@ export class ParamPOSService {
       const totalAmount = this.formatAmount(amount);
 
       // HASH oluşturma
-      const hashData = `${this.config.clientCode}${this.config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
+      const hashData = `${config.clientCode}${config.guid}${installment}${formattedAmount}${totalAmount}${orderId}`;
       const hash = this.generateHash(hashData);
 
-      const expiryMonth = cardExpiry.substring(0, 2);
-      const expiryYear = cardExpiry.substring(2, 4);
+      const expiryMonth = cardExpiry!.substring(0, 2);
+      const expiryYear = cardExpiry!.substring(2, 4);
 
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         KK_Sahibi: cardHolderName,
-        KK_No: cardNumber.replace(/\s/g, ''),
+        KK_No: cardNumber!.replace(/\s/g, ''),
         KK_SK_Ay: expiryMonth,
         KK_SK_Yil: expiryYear,
         KK_CVC: cardCvv,
@@ -557,14 +574,15 @@ export class ParamPOSService {
    * 3D Secure tamamlama (Callback sonrası)
    */
   async complete3DSecurePayment(params: any): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const requestParams = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         UCD_MD: params.UCD_MD || params.Islem_ID,
         Islem_GUID: params.Islem_GUID,
         Siparis_ID: params.Siparis_ID,
@@ -601,14 +619,15 @@ export class ParamPOSService {
    * İşlem sorgulama
    */
   async queryTransaction(orderId: string): Promise<any> {
+    const config = await this.loadConfig();
     try {
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         Siparis_ID: orderId,
       };
 
@@ -623,14 +642,15 @@ export class ParamPOSService {
    * İptal işlemi
    */
   async cancelTransaction(orderId: string, transactionId: string): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         Siparis_ID: orderId,
         Islem_ID: transactionId,
       };
@@ -655,16 +675,17 @@ export class ParamPOSService {
    * İade işlemi
    */
   async refundTransaction(orderId: string, transactionId: string, amount: number): Promise<PaymentResponse> {
+    const config = await this.loadConfig();
     try {
       const formattedAmount = this.formatAmount(amount);
 
       const params = {
         G: {
-          CLIENT_CODE: this.config.clientCode,
-          CLIENT_USERNAME: this.config.clientUsername,
-          CLIENT_PASSWORD: this.config.clientPassword,
+          CLIENT_CODE: config.clientCode,
+          CLIENT_USERNAME: config.clientUsername,
+          CLIENT_PASSWORD: config.clientPassword,
         },
-        GUID: this.config.guid,
+        GUID: config.guid,
         Siparis_ID: orderId,
         Islem_ID: transactionId,
         Iade_Tutar: formattedAmount,

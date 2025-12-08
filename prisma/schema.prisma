@@ -152,6 +152,18 @@ model Order {
   paramposOrderId       String?
   paramposPaymentData   String? @db.Text // JSON
   
+  // EFT/Havale Payment Details
+  paymentReceiptBase64  String? @db.LongText // Dekont dosyası base64
+  paymentReceiptFileName String? // Orijinal dosya adı
+  paymentReceiptMimeType String? // Dosya tipi (image/jpeg, application/pdf, vb.)
+  paymentReceiptUploadedAt DateTime? // Yüklenme tarihi
+  paymentReceiptUploadedBy String? // Yükleyen admin kullanıcı ID
+  paymentApprovedAt     DateTime? // Ödeme onay tarihi
+  paymentApprovedBy     String? // Onaylayan admin kullanıcı ID
+  paymentRejectedAt     DateTime? // Ödeme red tarihi
+  paymentRejectedBy     String? // Reddeden admin kullanıcı ID
+  paymentRejectionReason String? @db.Text // Red nedeni
+  
   // Geliver Cargo Details
   geliverShipmentId     String? // Geliver gönderi ID'si
   geliverTransactionId  String? // Geliver işlem ID'si
@@ -487,4 +499,21 @@ model WebhookLog {
   @@index([isSuccess])
   @@index([createdAt])
   @@map("webhook_logs")
+}
+
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  category    String   // 'general', 'shipping', 'payment', 'email', 'seo', 'social', 'geliver', 'parampos'
+  label       String
+  type        String   // 'text', 'number', 'boolean', 'email', 'url', 'textarea', 'select'
+  description String?  @db.Text
+  options     String?  @db.Text // JSON array for select type
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@map("site_settings")
 }
