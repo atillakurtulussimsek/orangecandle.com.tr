@@ -24,11 +24,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid product IDs' }, { status: 400 });
     }
 
-    const result = await prisma.product.deleteMany({
+    const result = await prisma.product.updateMany({
       where: {
         id: {
           in: ids,
         },
+      },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
       },
     });
 

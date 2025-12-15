@@ -1,4 +1,21 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
 export default function Features() {
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(250);
+
+  useEffect(() => {
+    fetch('/api/settings/public')
+      .then(res => res.json())
+      .then(data => {
+        if (data.shipping?.freeShippingThreshold) {
+          setFreeShippingThreshold(data.shipping.freeShippingThreshold);
+        }
+      })
+      .catch(err => console.error('Settings fetch error:', err));
+  }, []);
+
   const features = [
     {
       icon: (
@@ -7,7 +24,7 @@ export default function Features() {
         </svg>
       ),
       title: 'Ücretsiz Kargo',
-      description: '500 TL ve üzeri alışverişlerde',
+      description: `${freeShippingThreshold} TL ve üzeri alışverişlerde`,
     },
     {
       icon: (

@@ -85,7 +85,10 @@ export async function GET(request: Request) {
     // Fetch products with category
     const [products, total] = await Promise.all([
       prisma.product.findMany({
-        where,
+        where: {
+          ...where,
+          isDeleted: false,
+        },
         include: {
           category: {
             select: {

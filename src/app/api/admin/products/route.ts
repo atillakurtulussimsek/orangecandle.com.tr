@@ -20,6 +20,9 @@ export async function GET(request: NextRequest) {
     }
 
     const products = await prisma.product.findMany({
+      where: {
+        isDeleted: false,
+      },
       include: {
         category: {
           select: {

@@ -4,8 +4,11 @@ import prisma from '@/lib/prisma';
 // GET /api/products/[slug]
 export async function GET(request: Request, { params }: { params: { slug: string } }) {
   try {
-    const product = await prisma.product.findUnique({
-      where: { slug: params.slug },
+    const product = await prisma.product.findFirst({
+      where: { 
+        slug: params.slug,
+        isDeleted: false,
+      },
       include: {
         category: {
           select: {
@@ -118,11 +121,15 @@ export async function PUT(request: Request, { params }: { params: { slug: string
 // DELETE /api/products/[slug] - Ürün sil (Admin)
 export async function DELETE(request: Request, { params }: { params: { slug: string } }) {
   try {
-    await prisma.product.delete({
+    await prisma.product.update({
       where: { slug: params.slug },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
     });
 
-    return NextResponse.json({ message: 'Ürün silindi' });
+    return NextResponse.json({ message: 'Ürün silindi (soft delete)' });
   } catch (error) {
     console.error('Delete Product Error:', error);
     return NextResponse.json({ error: 'Ürün silinirken hata oluştu' }, { status: 500 });

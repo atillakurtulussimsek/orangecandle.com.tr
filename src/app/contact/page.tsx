@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+interface ContactInfo {
+  phone?: string;
+  email?: string;
+  address?: string;
+  workingHours?: string;
+}
+
 export default function ContactPage() {
+  const [contactInfo, setContactInfo] = useState<ContactInfo>({});
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -14,6 +22,23 @@ export default function ContactPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    // Fetch contact info from settings
+    fetch('/api/settings/public')
+      .then(res => res.json())
+      .then(data => {
+        if (data.contact) {
+          setContactInfo({
+            phone: data.contact.phone || '+90 (5xx) xxx xx xx',
+            email: data.contact.email || 'info@orangecandle.com.tr',
+            address: data.contact.address || 'Kadıköy, İstanbul',
+            workingHours: data.contact.workingHours || 'Pzt-Cum: 09:00-18:00',
+          });
+        }
+      })
+      .catch(err => console.error('Settings fetch error:', err));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({
@@ -76,26 +101,26 @@ export default function ContactPage() {
         {/* Contact Methods - Modern Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
           {/* Phone */}
-          <a href="tel:+905xxxxxxxxx" className="group bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 hover:border-orange-300 hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-orange-100 hover:-translate-y-1">
+          <a href={`tel:${contactInfo.phone?.replace(/\s/g, '') || '+905xxxxxxxxx'}`} className="group bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 hover:border-orange-300 hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-orange-100 hover:-translate-y-1">
             <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-orange-200">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-500 mb-1">TELEFON</h3>
-            <p className="text-gray-900 font-semibold">+90 (5xx) xxx xx xx</p>
-            <p className="text-xs text-gray-500 mt-2">Pzt-Cum: 09:00-18:00</p>
+            <p className="text-gray-900 font-semibold">{contactInfo.phone || '+90 (5xx) xxx xx xx'}</p>
+            <p className="text-xs text-gray-500 mt-2">{contactInfo.workingHours || 'Pzt-Cum: 09:00-18:00'}</p>
           </a>
 
           {/* Email */}
-          <a href="mailto:info@orangecandle.com.tr" className="group bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 hover:border-blue-300 hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-blue-100 hover:-translate-y-1">
+          <a href={`mailto:${contactInfo.email || 'info@orangecandle.com.tr'}`} className="group bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200/50 hover:border-blue-300 hover:bg-white transition-all duration-300 hover:shadow-xl hover:shadow-blue-100 hover:-translate-y-1">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-lg shadow-blue-200">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-500 mb-1">E-POSTA</h3>
-            <p className="text-gray-900 font-semibold text-sm break-all">info@orangecandle.com.tr</p>
+            <p className="text-gray-900 font-semibold text-sm break-all">{contactInfo.email || 'info@orangecandle.com.tr'}</p>
             <p className="text-xs text-gray-500 mt-2">24 saat içinde yanıt</p>
           </a>
 
@@ -108,7 +133,7 @@ export default function ContactPage() {
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-500 mb-1">ADRES</h3>
-            <address className="text-gray-900 font-semibold not-italic">Kadıköy, İstanbul</address>
+            <address className="text-gray-900 font-semibold not-italic">{contactInfo.address || 'Kadıköy, İstanbul'}</address>
             <p className="text-xs text-gray-500 mt-2">Ziyaret randevusu alın</p>
           </div>
 

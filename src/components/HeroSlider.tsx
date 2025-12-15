@@ -8,39 +8,28 @@ import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 import 'swiper/css/effect-fade';
 
-export default function HeroSlider() {
-  const slides = [
-    {
-      id: 1,
-      title: 'El Yapımı Mumlar',
-      subtitle: 'Doğal ve Kokulu',
-      description: 'Eviniz için özel tasarlanmış, doğal balmumu ile üretilmiş mumlar',
-      image: '/mioca/assets/images/slider-image/1.jpg',
-      buttonText: 'Şimdi Keşfet',
-      buttonLink: '/products?category=mumlar',
-      bgColor: 'from-orange-500/90 to-red-500/90',
-    },
-    {
-      id: 2,
-      title: 'Özel Tasarım Koleksiyonu',
-      subtitle: 'Yeni Sezon',
-      description: 'Evinize şıklık katacak dekoratif ürünler',
-      image: '/mioca/assets/images/slider-image/2.jpg',
-      buttonText: 'Koleksiyonu Gör',
-      buttonLink: '/products?featured=true',
-      bgColor: 'from-purple-500/90 to-pink-500/90',
-    },
-    {
-      id: 3,
-      title: 'Hediyelik Setler',
-      subtitle: 'Sevdikleriniz İçin',
-      description: 'Özel günler için hazırlanmış hediyelik ürün setleri',
-      image: '/mioca/assets/images/slider-image/3.jpg',
-      buttonText: 'Setleri İncele',
-      buttonLink: '/products?category=hediyelik',
-      bgColor: 'from-blue-500/90 to-teal-500/90',
-    },
-  ];
+interface Slide {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  description: string | null;
+  image: string;
+  buttonText: string | null;
+  buttonLink: string | null;
+  bgColor: string | null;
+  order: number;
+  isActive: boolean;
+}
+
+interface HeroSliderProps {
+  slides: Slide[];
+}
+
+export default function HeroSlider({ slides }: HeroSliderProps) {
+  // Eğer veritabanında slider yoksa, bölümü gizle
+  if (!slides || slides.length === 0) {
+    return null;
+  }
 
   return (
     <div className="relative w-full">
@@ -68,14 +57,14 @@ export default function HeroSlider() {
         {slides.map((slide) => (
           <SwiperSlide key={slide.id}>
             <div className="relative h-full w-full">
-              {/* Background Image */}
+              {/* Background Image or Gradient */}
               <div
                 className="absolute inset-0 bg-cover bg-center transition-transform duration-700 hover:scale-105"
-                style={{
+                style={slide.image ? {
                   backgroundImage: `url(${slide.image})`,
-                }}
+                } : {}}
               >
-                <div className={`absolute inset-0 bg-gradient-to-r ${slide.bgColor}`} />
+                <div className={`absolute inset-0 bg-gradient-to-r ${slide.bgColor || 'from-orange-500/90 to-red-500/90'}`} />
               </div>
 
               {/* Content */}
@@ -91,7 +80,7 @@ export default function HeroSlider() {
                     {slide.description}
                   </p>
                   <Link
-                    href={slide.buttonLink}
+                    href={slide.buttonLink || '#'}
                     className="inline-flex items-center gap-2 bg-white text-gray-900 px-6 sm:px-8 md:px-10 py-3 sm:py-4 md:py-5 rounded-full font-semibold hover:bg-orange-500 hover:text-white transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 hover:scale-105 transform animate-fade-in-up animation-delay-600"
                   >
                     {slide.buttonText}

@@ -78,7 +78,8 @@ export default function ProductsPage() {
       const res = await fetch('/api/categories');
       if (res.ok) {
         const data = await res.json();
-        setCategories(data);
+        const categoriesData = data.categories || data;
+        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
       }
     } catch (error) {
       console.error('Failed to load categories:', error);

@@ -13,7 +13,7 @@ export async function GET() {
       orderBy: { name: 'asc' },
     });
 
-    return NextResponse.json(categories);
+    return NextResponse.json({ categories });
   } catch (error) {
     console.error('Categories API Error:', error);
     return NextResponse.json({ error: 'Kategoriler yüklenirken hata oluştu' }, { status: 500 });

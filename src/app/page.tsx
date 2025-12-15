@@ -6,6 +6,12 @@ import prisma from '@/lib/prisma';
 
 async function getHomePageData() {
   try {
+    // Slider'ları getir (aktif olanlar)
+    const slides = await prisma.heroSlide.findMany({
+      where: { isActive: true },
+      orderBy: { order: 'asc' },
+    });
+
     // Kategorileri getir (ürün sayısıyla)
     const categories = await prisma.category.findMany({
       include: {
@@ -21,6 +27,7 @@ async function getHomePageData() {
     const featuredProducts = await prisma.product.findMany({
       where: { 
         featured: true,
+        isDeleted: false,
         OR: [
           { stockTracking: false }, // Stok takibi kapalı = her zaman sipariş alınabilir
           { stock: { gt: 0 } }, // Stokta var
@@ -83,12 +90,14 @@ async function getHomePageData() {
     });
 
     return {
+      slides,
       categories: formattedCategories,
       products: sortedProducts,
     };
   } catch (error) {
     console.error('Home Page Data Error:', error);
     return {
+      slides: [],
       categories: [],
       products: [],
     };
@@ -96,12 +105,12 @@ async function getHomePageData() {
 }
 
 export default async function Home() {
-  const { categories, products } = await getHomePageData();
+  const { slides, categories, products } = await getHomePageData();
 
   return (
     <>
       {/* Hero Slider */}
-      <HeroSlider />
+      <HeroSlider slides={slides} />
 
       {/* Features */}
       <Features />

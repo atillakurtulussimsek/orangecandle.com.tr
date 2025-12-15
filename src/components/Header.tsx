@@ -133,9 +133,6 @@ export default function Header() {
               <Link href="/categories" className="text-gray-700 hover:text-orange-500 transition font-medium">
                 Kategoriler
               </Link>
-              <Link href="/about" className="text-gray-700 hover:text-orange-500 transition font-medium">
-                Hakkımızda
-              </Link>
               <Link href="/contact" className="text-gray-700 hover:text-orange-500 transition font-medium">
                 İletişim
               </Link>

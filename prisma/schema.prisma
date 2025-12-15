@@ -100,6 +100,10 @@ model Product {
   backorderMessage String? @db.Text        // Ön sipariş mesajı
   lowStockThreshold Int    @default(10)    // Düşük stok uyarı seviyesi
   
+  // Soft Delete
+  isDeleted    Boolean  @default(false)    // Silinmiş mi?
+  deletedAt    DateTime?                   // Silinme tarihi
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -516,4 +520,23 @@ model SiteSetting {
 
   @@index([category])
   @@map("site_settings")
+}
+
+model HeroSlide {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  description String?  @db.Text
+  image       String?  @db.Text // Image URL or path (optional)
+  buttonText  String?
+  buttonLink  String?  @db.Text
+  bgColor     String?  // Tailwind gradient class
+  order       Int      @default(0) // Display order
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([order])
+  @@index([isActive])
+  @@map("hero_slides")
 }

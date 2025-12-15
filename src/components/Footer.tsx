@@ -1,6 +1,51 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface ContactInfo {
+  address?: string;
+  email?: string;
+  phone?: string;
+}
 
 export default function Footer() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [contactInfo, setContactInfo] = useState<ContactInfo>({});
+
+  useEffect(() => {
+    // Fetch categories
+    fetch('/api/categories')
+      .then(res => res.json())
+      .then(data => {
+        const categoriesData = data.categories || data;
+        if (Array.isArray(categoriesData)) {
+          setCategories(categoriesData.slice(0, 5)); // İlk 5 kategori
+        }
+      })
+      .catch(err => console.error('Categories fetch error:', err));
+
+    // Fetch contact info from settings
+    fetch('/api/settings/public')
+      .then(res => res.json())
+      .then(data => {
+        if (data.contact) {
+          setContactInfo({
+            address: data.contact.address || 'İstanbul, Türkiye',
+            email: data.contact.email || 'info@orangecandle.com.tr',
+            phone: data.contact.phone || '+90 (5xx) xxx xx xx',
+          });
+        }
+      })
+      .catch(err => console.error('Settings fetch error:', err));
+  }, []);
+
   return (
     <footer className="bg-gray-900 text-gray-300">
       <div className="container mx-auto px-4 py-8 sm:py-12">
@@ -96,31 +141,31 @@ export default function Footer() {
           <div className="text-center sm:text-left">
             <h3 className="text-white text-base sm:text-lg font-semibold mb-3 sm:mb-4">Kategoriler</h3>
             <ul className="space-y-2 text-sm">
-              <li>
-                <Link href="/products?category=mumlar" className="hover:text-orange-500 transition inline-block">
-                  Mumlar
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=kokulu-mumlar" className="hover:text-orange-500 transition inline-block">
-                  Kokulu Mumlar
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=dekoratif-mumlar" className="hover:text-orange-500 transition inline-block">
-                  Dekoratif Mumlar
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=hediyelik" className="hover:text-orange-500 transition inline-block">
-                  Hediyelik Eşyalar
-                </Link>
-              </li>
-              <li>
-                <Link href="/products?category=aksesuar" className="hover:text-orange-500 transition inline-block">
-                  Aksesuarlar
-                </Link>
-              </li>
+              {categories.length > 0 ? (
+                categories.map((category) => (
+                  <li key={category.id}>
+                    <Link 
+                      href={`/products?category=${category.slug}`} 
+                      className="hover:text-orange-500 transition inline-block"
+                    >
+                      {category.name}
+                    </Link>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li>
+                    <Link href="/products?category=mumlar" className="hover:text-orange-500 transition inline-block">
+                      Mumlar
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/products?category=kokulu-mumlar" className="hover:text-orange-500 transition inline-block">
+                      Kokulu Mumlar
+                    </Link>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -133,22 +178,22 @@ export default function Footer() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span>İstanbul, Türkiye</span>
+                <span>{contactInfo.address || 'İstanbul, Türkiye'}</span>
               </li>
               <li className="flex items-center justify-center sm:justify-start">
                 <svg className="w-5 h-5 mr-2 flex-shrink-0 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-                <a href="mailto:info@orangecandle.com.tr" className="hover:text-orange-500 transition">
-                  info@orangecandle.com.tr
+                <a href={`mailto:${contactInfo.email || 'info@orangecandle.com.tr'}`} className="hover:text-orange-500 transition">
+                  {contactInfo.email || 'info@orangecandle.com.tr'}
                 </a>
               </li>
               <li className="flex items-center justify-center sm:justify-start">
                 <svg className="w-5 h-5 mr-2 flex-shrink-0 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                 </svg>
-                <a href="tel:+905xxxxxxxxx" className="hover:text-orange-500 transition">
-                  +90 (5xx) xxx xx xx
+                <a href={`tel:${contactInfo.phone?.replace(/\s/g, '') || '+905xxxxxxxxx'}`} className="hover:text-orange-500 transition">
+                  {contactInfo.phone || '+90 (5xx) xxx xx xx'}
                 </a>
               </li>
             </ul>

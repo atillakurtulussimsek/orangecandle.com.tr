@@ -1,74 +1,38 @@
-'use client';
-
 import Link from 'next/link';
 import Image from 'next/image';
+import prisma from '@/lib/prisma';
 
-const categories = [
-  {
-    id: '1',
-    name: 'Kokulu Mumlar',
-    slug: 'kokulu-mumlar',
-    description: 'Doğal esanslarla hazırlanmış özel kokulu mumlar',
-    image: 'https://images.unsplash.com/photo-1602874801006-be37a82310b9?w=800&h=600&fit=crop',
-    productCount: 24,
-    featured: true,
-    gradient: 'from-purple-500 to-pink-500',
-  },
-  {
-    id: '2',
-    name: 'Dekoratif Mumlar',
-    slug: 'dekoratif-mumlar',
-    description: 'Evinizi güzelleştirecek özel tasarım mumlar',
-    image: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?w=800&h=600&fit=crop',
-    productCount: 18,
-    featured: true,
-    gradient: 'from-blue-500 to-cyan-500',
-  },
-  {
-    id: '3',
-    name: 'Hediyelik Setler',
-    slug: 'hediyelik-setler',
-    description: 'Özel günleriniz için hazırlanmış mum setleri',
-    image: 'https://images.unsplash.com/photo-1612198188060-c7c2a3b66eae?w=800&h=600&fit=crop',
-    productCount: 12,
-    featured: true,
-    gradient: 'from-orange-500 to-red-500',
-  },
-  {
-    id: '4',
-    name: 'Mum Aksesuarları',
-    slug: 'aksesuar',
-    description: 'Mumlarınız için özel aksesuar ve fitiller',
-    image: 'https://images.unsplash.com/photo-1615485500034-c10253d1e262?w=800&h=600&fit=crop',
-    productCount: 8,
-    featured: false,
-    gradient: 'from-green-500 to-teal-500',
-  },
-  {
-    id: '5',
-    name: 'Sezonluk Koleksiyon',
-    slug: 'sezonluk-koleksiyon',
-    description: 'Mevsime özel tasarlanmış mum koleksiyonları',
-    image: 'https://images.unsplash.com/photo-1602874801006-be37a82310b9?w=800&h=600&fit=crop',
-    productCount: 15,
-    featured: false,
-    gradient: 'from-yellow-500 to-orange-500',
-  },
-  {
-    id: '6',
-    name: 'Özel Tasarım',
-    slug: 'ozel-tasarim',
-    description: 'Sizin için özel olarak tasarlanmış mumlar',
-    image: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?w=800&h=600&fit=crop',
-    productCount: 6,
-    featured: false,
-    gradient: 'from-pink-500 to-rose-500',
-  },
-];
+async function getCategoriesData() {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        _count: {
+          select: { products: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
 
-export default function CategoriesPage() {
-  const featuredCategories = categories.filter(cat => cat.featured);
-  const otherCategories = categories.filter(cat => !cat.featured);
+    return categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      description: category.description || '',
+      image: category.image || 'https://images.unsplash.com/photo-1602874801006-be37a82310b9?w=800&h=600&fit=crop',
+      productCount: category._count.products,
+    }));
+  } catch (error) {
+    console.error('Categories fetch error:', error);
+    return [];
+  }
+}
+
+export default async function CategoriesPage() {
+  const categories = await getCategoriesData();
+  
+  // İlk 3 kategoriyi öne çıkan olarak göster
+  const featuredCategories = categories.slice(0, 3);
+  const otherCategories = categories.slice(3);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50">
@@ -132,7 +96,7 @@ export default function CategoriesPage() {
                     className="object-cover group-hover:scale-110 transition-transform duration-700"
                   />
                   {/* Gradient Overlay */}
-                  <div className={`absolute inset-0 bg-gradient-to-t ${category.gradient} opacity-0 group-hover:opacity-30 transition-opacity duration-500`} />
+                  <div className="absolute inset-0 bg-gradient-to-t from-orange-500 to-orange-600 opacity-0 group-hover:opacity-30 transition-opacity duration-500" />
                   
                   {/* Product Count Badge */}
                   <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full">
@@ -199,7 +163,7 @@ export default function CategoriesPage() {
                       className="object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     {/* Gradient Overlay on Hover */}
-                    <div className={`absolute inset-0 bg-gradient-to-br ${category.gradient} opacity-0 group-hover:opacity-20 transition-opacity`} />
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600 opacity-0 group-hover:opacity-20 transition-opacity" />
                   </div>
 
                   {/* Content */}

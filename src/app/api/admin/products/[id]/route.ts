@@ -163,8 +163,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    await prisma.product.delete({
+    await prisma.product.update({
       where: { id: params.id },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
     });
 
     // Log aktivitesi
@@ -172,7 +176,7 @@ export async function DELETE(
       userId: decoded.userId,
       action: 'ADMIN_PRODUCT_DELETE',
       category: 'ADMIN',
-      description: `Ürün silindi: ${product.name} (SKU: ${product.sku})`,
+      description: `Ürün silindi (soft delete): ${product.name} (SKU: ${product.sku})`,
       metadata: {
         productId: product.id,
         productName: product.name,

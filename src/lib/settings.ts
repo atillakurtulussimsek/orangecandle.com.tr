@@ -162,6 +162,8 @@ export async function getSiteConfig() {
     maintenanceMode: generalSettings.maintenance_mode === 'true',
     contactEmail: generalSettings.contact_email || '',
     contactPhone: generalSettings.contact_phone || '',
+    address: generalSettings.address || '',
+    workingHours: generalSettings.working_hours || '',
   };
 }
 
